@@ -5,7 +5,7 @@ Integrates:
  1. ⚛️ Semantic Atoms & Context Codec (arXiv:2605.17304)
  2. 📝 Chain-of-Draft (CoD) Minimal Reasoning (arXiv:2502.18600)
  3. 🗺️ Tree-sitter / AST Code Symbol Mapper
- 4. 🧠 Local GPU Vector Search (qwen3-embedding:8b)
+ 4. 🧠 Local GPU Vector Search (qwen3-embedding:8b / bge-m3)
  5. 🕸️ Entity-Relation Knowledge Graph Memory
  6. ⚡ Deterministic Prompt Prefix Alignment (for 90% KV cache hits)
 """
@@ -30,7 +30,7 @@ PORT = 8080
 UPSTREAM_URL = os.getenv("UPSTREAM_URL", "http://127.0.0.1:20128")
 VAULT_PATH = os.path.expanduser("~/.local/share/omniroute-rag/knowledge_vault.sqlite")
 OLLAMA_URL = "http://127.0.0.1:11434/api/embeddings"
-MODEL_NAME = "qwen3-embedding:8b"
+MODEL_NAME = "bge-m3"
 
 CYAN = "\033[96m"
 GREEN = "\033[92m"
@@ -40,13 +40,8 @@ BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
 
-# SOTA Chain of Draft (CoD) Directive (forces 7.6% reasoning tokens)
-COD_DIRECTIVE = """
-[EFFICIENCY PROTOCOL: CHAIN-OF-DRAFT (CoD)]
-• Use concise, terse draft reasoning. Do NOT output verbose monologues.
-• Focus directly on the exact code fix, command, or answer.
-• Omit pleasantries, conversational filler, and redundant restatements.
-""".strip()
+# SOTA Chain of Draft (CoD) Directive
+COD_DIRECTIVE = """[PROTOCOL: CHAIN-OF-DRAFT (CoD)] Use concise, terse draft reasoning. Do NOT output verbose monologues."""
 
 def get_query_embedding(query: str) -> List[float]:
     req_data = json.dumps({"model": MODEL_NAME, "prompt": query[:1000]}).encode("utf-8")
@@ -56,7 +51,6 @@ def get_query_embedding(query: str) -> List[float]:
             data = json.loads(resp.read().decode("utf-8"))
             return data.get("embedding", [])
     except Exception:
-        # Fallback to local deterministic bag-of-words if Ollama download in progress
         return []
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
@@ -97,19 +91,16 @@ def retrieve_top_chunks(query: str, top_k: int = 2) -> List[Tuple[str, str, floa
 class SemanticAtomExtractor:
     @staticmethod
     def extract_atoms(messages: List[Dict[str, Any]]) -> str:
-        """Extracts goal, target files, and decisions into concise Semantic Atoms (arXiv:2605.17304)."""
         atoms = []
         for m in messages:
             content = str(m.get("content", ""))
             role = m.get("role", "user")
             
-            # File references
             files = re.findall(r'[\w/-]+\.(?:py|sh|rs|js|ts|qml|json|toml|md)', content)
             if files:
                 unique_files = list(set(files))[:3]
-                atoms.append(f"• Active Files: {', '.join(unique_files)}")
+                atoms.append(f"• Files: {', '.join(unique_files)}")
             
-            # Action keywords
             if role == "user" and len(content) < 150:
                 atoms.append(f"• User Directive: \"{content.strip()}\"")
 
@@ -131,18 +122,19 @@ class ContextCompressor:
 
         raw_tokens = sum(ContextCompressor.estimate_tokens(str(m.get("content", ""))) for m in messages)
         
-        # Extract latest user query for vector RAG and Knowledge Graph
+        # If payload is already compact and small, preserve cleanly
+        if raw_tokens <= 1200 and len(messages) <= 4:
+            return messages, raw_tokens, raw_tokens
+
         latest_query = ""
         for m in reversed(messages):
             if m.get("role") == "user":
                 latest_query = str(m.get("content", ""))
                 break
 
-        # 1. Retrieve Knowledge Graph Triples
-        facts = get_relevant_facts(latest_query, limit=4)
+        facts = get_relevant_facts(latest_query, limit=3)
         facts_prompt = format_facts_for_prompt(facts)
 
-        # 2. Retrieve Local Vector RAG Slices
         rag_context = ""
         if latest_query and len(latest_query) > 5:
             top_chunks = retrieve_top_chunks(latest_query, top_k=2)
@@ -150,15 +142,13 @@ class ContextCompressor:
                 rag_snippets = []
                 for fp, content, score in top_chunks:
                     rel_path = os.path.basename(fp)
-                    rag_snippets.append(f"[{rel_path} (score: {score:.2f})]:\n{content[:500]}")
-                rag_context = "### RETRIEVED CODE SLICES (Qwen3 Local Vector Vault):\n" + "\n\n".join(rag_snippets)
+                    rag_snippets.append(f"[{rel_path}]:\n{content[:400]}")
+                rag_context = "### RETRIEVED CODE SLICES:\n" + "\n\n".join(rag_snippets)
 
-        # 3. Extract Semantic Atoms
         semantic_atoms = SemanticAtomExtractor.extract_atoms(messages[:-3] if len(messages) > 3 else [])
 
         compressed = []
         
-        # Preserve Static System Prompt Prefix (for KV Cache Hits)
         system_content = COD_DIRECTIVE
         if messages[0].get("role") == "system":
             system_content = messages[0].get("content", "") + "\n\n" + COD_DIRECTIVE
@@ -175,15 +165,15 @@ class ContextCompressor:
             "content": system_content
         })
 
-        # Append recent turns verbatim
         start_idx = 1 if messages[0].get("role") == "system" else 0
         recent_turns = messages[-3:] if len(messages) > 3 else messages[start_idx:]
 
         for m in recent_turns:
             content = str(m.get("content", ""))
-            # Prune giant terminal / file dumps > 6000 chars
-            if len(content) > 6000:
-                content = content[:2500] + "\n\n... [Output pruned for maximum token efficiency] ...\n\n" + content[-1200:]
+            # Prune large code/tool dumps > 1500 chars in middle turns
+            if len(content) > 2500:
+                lines = content.splitlines()
+                content = "\n".join(lines[:10]) + f"\n... [{len(lines) - 20} lines truncated for token efficiency] ...\n" + "\n".join(lines[-10:])
                 compressed.append({
                     "role": m.get("role", "user"),
                     "content": content
@@ -218,7 +208,6 @@ class RAGProxyHandler(BaseHTTPRequestHandler):
                     saved_tok = before_tok - after_tok
                     lat_ms = (time.time() - t0) * 1000
                     
-                    # Log telemetry
                     log_request_metric(MODEL_NAME, before_tok, after_tok, lat_ms, chunks_injected=2)
 
                     sys.stderr.write(f"\n{GREEN}{BOLD}⚡ [SOTA RAG Compressor]{RESET} {YELLOW}{before_tok:,} tokens{RESET} ➔ {GREEN}{BOLD}{after_tok:,} tokens{RESET} {MAGENTA}(Saved {saved_tok:,} tokens • {savings_pct:.1f}% Quota Saved • Latency: {lat_ms:.1f}ms){RESET}\n\n")
@@ -263,15 +252,7 @@ class RAGProxyHandler(BaseHTTPRequestHandler):
                 "status": "ONLINE",
                 "service": "Ultra-Efficient SOTA RAG Compressor Proxy",
                 "port": PORT,
-                "embedding_model": f"{MODEL_NAME} (NVIDIA RTX 4060 GPU)",
-                "sota_techniques": [
-                    "Semantic Atoms & Context Codec (arXiv:2605.17304)",
-                    "Chain-of-Draft Reasoning (arXiv:2502.18600)",
-                    "AST Code Repository Mapping",
-                    "Local GPU Vector Retrieval",
-                    "Entity-Relation Knowledge Graph Memory",
-                    "Deterministic Prompt Cache Alignment"
-                ]
+                "embedding_model": f"{MODEL_NAME} (NVIDIA RTX 4060 GPU)"
             }
             self.wfile.write(json.dumps(status, indent=2).encode("utf-8"))
             return
