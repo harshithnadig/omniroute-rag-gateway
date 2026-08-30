@@ -20,7 +20,7 @@ PORT = 8080
 UPSTREAM_URL = os.getenv("UPSTREAM_URL", "http://127.0.0.1:20128")
 DB_PATH = os.path.expanduser("~/.local/share/omniroute-rag/knowledge_vault.sqlite")
 OLLAMA_URL = "http://127.0.0.1:11434/api/embeddings"
-MODEL_NAME = "nomic-embed-text"
+MODEL_NAME = "qwen3-embedding:8b"
 
 CYAN = "\033[96m"
 GREEN = "\033[92m"
