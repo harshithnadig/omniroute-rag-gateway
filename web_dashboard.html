@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>⚡ OmniRoute RAG & Token Shield Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --purple: #bc8cff;
+      --fg: #c9d1d9;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 30px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .title { font-size: 26px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .badge { background: rgba(63, 185, 80, 0.2); color: var(--green); border: 1px solid var(--green); padding: 4px 10px; border-radius: 12px; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+    .card-title { font-size: 13px; text-transform: uppercase; color: #8b949e; letter-spacing: 1px; margin-bottom: 10px; }
+    .stat-val { font-size: 32px; font-weight: bold; color: #fff; }
+    .stat-sub { font-size: 13px; color: var(--green); margin-top: 5px; }
+    .progress-bar { background: #21262d; border-radius: 6px; height: 12px; overflow: hidden; margin-top: 15px; }
+    .progress-fill { background: var(--green); height: 100%; width: 98.6%; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { color: #8b949e; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">⚡ OmniRoute RAG & Token Shield Dashboard</div>
+    <div class="badge">● ENGINE ONLINE</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Active Embedding Model</div>
+      <div class="stat-val" style="color: var(--accent);">Qwen3 (8B)</div>
+      <div class="stat-sub">Quantized 8B • NVIDIA RTX 4060 GPU</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Quota Efficiency</div>
+      <div class="stat-val" style="color: var(--green);">98.6%</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">AI Tokens Saved</div>
+      <div class="stat-val" style="color: var(--purple);">240,760</div>
+      <div class="stat-sub">From 244,180 ➔ 3,420 tokens</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stored Vector Chunks</div>
+      <div class="stat-val">47</div>
+      <div class="stat-sub">Across 21 indexed workspace files</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 30px;">
+    <div class="card-title">Recent RAG Compression Requests</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Model</th>
+          <th>Before Tokens</th>
+          <th>After Tokens</th>
+          <th>Tokens Saved</th>
+          <th>Savings %</th>
+          <th>GPU Latency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Just now</td>
+          <td>qwen3-embedding:8b</td>
+          <td>244,180</td>
+          <td>3,420</td>
+          <td style="color: var(--green); font-weight: bold;">240,760</td>
+          <td style="color: var(--green);">98.6%</td>
+          <td>8.4 ms</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
